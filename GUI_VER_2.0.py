@@ -1,18 +1,19 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[23]:
+# In[3]:
 
 
+import os
 import tkinter as tk
 import subprocess
-import os
 import time
+
 from tkinter import ttk, messagebox
-import logging # SET UP LOGGING
 from enum import Enum  
 from typing import Optional
 from data_flow import Controller, Stage
+from pure_functions import counter
 
 class MyApplication(tk.Tk):
     def __init__(self):
@@ -49,6 +50,8 @@ class MyApplication(tk.Tk):
         # Boolean variables
         self.variables_set = tk.BooleanVar(value = False)
         self.process_stop  = tk.BooleanVar(value = False)
+
+        # Controlling the process in the background
         self.contr : Controller | None = None
         
         # Integer variables
@@ -168,7 +171,7 @@ class MyApplication(tk.Tk):
         
         return [len(i) != 0 for i in [self.text_exp_loc.get().strip(), self.text_imed_loc.get().strip(), self.text_no_exp.get().strip()]]              
     
-    
+        
     # ----------------------------------- BUTTON CALLS  -------------------------------------------
         
         
@@ -230,10 +233,10 @@ class MyApplication(tk.Tk):
         if not self.variables_set.get():         
             messagebox.showerror("Error", 'Please define variables first!')
             
-        elif self.contr.counter(self.omni_folder.get(), self.omni_filename) != 0:  
+        elif counter(self.omni_folder.get(), self.omni_filename) != 0:  
             messagebox.showerror("Error", 'Files \n already in experiment folder')
 
-        elif self.contr.counter(self.imed_folder.get(), self.imed_filename) != 0:    
+        elif counter(self.imed_folder.get(), self.imed_filename) != 0:    
             messagebox.showerror("Error", 'Files \n already in IMED folder')
         else:
             
@@ -368,10 +371,11 @@ if __name__ == "__main__":
 # C:\Users\user\Desktop\OMNI\2. IMED
 
 
-# In[22]:
+# In[2]:
 
 
 import os, shutil
+
 folder_1 = r'C:\Users\user\Desktop\OMNI\1. OMNI'
 folder_2 = r'C:\Users\user\Desktop\OMNI\2. IMED'
 
@@ -389,6 +393,18 @@ def folder_cleaner(folder):
 
 folder_cleaner(folder_1)
 folder_cleaner(folder_2)
+
+
+# In[20]:
+
+
+from pure_functions import counter
+
+
+# In[18]:
+
+
+counter(r"C:\Users\user\Desktop\OMNI\1. OMNI", "expttsd")
 
 
 # In[ ]:

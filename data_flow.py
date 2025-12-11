@@ -8,6 +8,7 @@ import os
 from enum import Enum
 from typing import Optional
 from pure_functions import counter
+import subprocess
 
 class Stage(Enum):
     OMNI = "OMNI"
@@ -34,6 +35,11 @@ class Controller:
         self.current_stage = Stage.OMNI
         self.process_stop = False
 
+        # START OMNIBUS for the 1st time - self.omni_folder
+        
+        a = subprocess.run(["cmd", "/c", "dir"], capture_output=True, text=True)
+        print(a)
+
     def reset(self):
         self.process_stop = False
         self.current_stage = None
@@ -46,10 +52,10 @@ class Controller:
         self.process_stop = True  
 
     def if_omni_finished(self,path,num): 
-        return self.counter(path, self.omni_filename) >= num
+        return counter(path, self.omni_filename) >= num
 
     def if_imed_finished(self,path): 
-        return self.counter(path, self.imed_filename) >= 1
+        return counter(path, self.imed_filename) >= 1
     
     def pathcreator_imed(self, counter_val, path_orig):
         if counter_val == 0:
@@ -65,7 +71,7 @@ class Controller:
         
         return PATH
         
-    def pathcreator_omni( counter_val, path_orig):
+    def pathcreator_omni(self, counter_val, path_orig):
         if counter_val == 0:
             PATH = path_orig
             exp_count = self.initial_exp_count
