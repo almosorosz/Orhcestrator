@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[3]:
+# In[53]:
 
 
 import os
@@ -12,8 +12,11 @@ import time
 from tkinter import ttk, messagebox
 from enum import Enum  
 from typing import Optional
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
 from data_flow import Controller, Stage
 from pure_functions import counter
+from DataManager import DataManager
 
 class MyApplication(tk.Tk):
     def __init__(self):
@@ -24,9 +27,9 @@ class MyApplication(tk.Tk):
         self.title("Or-Q")
         self.geometry("600x400")
 
-        
+        # ------------------------------------------------------------------------------------------------
         # -------------------------------------------- STYLE ---------------------------------------------
-
+        # ------------------------------------------------------------------------------------------------
         
         style = ttk.Style(self)
         style.theme_use("alt")
@@ -43,16 +46,19 @@ class MyApplication(tk.Tk):
         style.map("Green.TButton",background=[("active","lightgreen"),("pressed","lightgreen")],foreground=[("active","green"),("pressed","green")])
         style.map("Red.TButton",background=[("active","pink"),("pressed","pink")],foreground=[("active","red"),("pressed","red")])
         
-        
-        # -------------------------------------------- DEFINE VARIABLES ---------------------------------------------
-
+        # -------------------------------------------------------------------------------------------------------
+        # -------------------------------------------- DEFINE VARIABLES -----------------------------------------
+        # -------------------------------------------------------------------------------------------------------
         
         # Boolean variables
         self.variables_set = tk.BooleanVar(value = False)
         self.process_stop  = tk.BooleanVar(value = False)
 
         # Controlling the process in the background
-        self.contr : Controller | None = None
+        self.CONTROLLER : Controller | None = None
+
+        # Data manipulation in the background
+        self.DATAPROCESSOR : DataManager | None = None
         
         # Integer variables
         self.omni_run_count = tk.IntVar(value = 0) 
@@ -81,12 +87,10 @@ class MyApplication(tk.Tk):
         
         # --------------------------- Create Labels, Buttons, Textboxes ----------------------------------       
 
-    
     def create_labels(self):
         # ---------------------
         # Create labels
         # ---------------------
-        
         self.Omni_label1 = ttk.Label(self,  textvariable=self.omni_text)
         self.Imed_label1 = ttk.Label(self,  textvariable=self.imed_text)
         self.general_label1 = ttk.Label(self, text = 'Currently running:')
@@ -105,28 +109,30 @@ class MyApplication(tk.Tk):
         # ---------------------
         # Create buttons
         # ---------------------
-    
         self.start_button  = ttk.Button(self, text="Start automated experiments", command=self.start_command)
         self.define_button = ttk.Button(self, text="Define settings", command=self.define_command)
         self.quit_button   = ttk.Button(self, text="Quit", width=8, command=self.destroy)         
         self.stop_button   = ttk.Button(self, text="Stop", width=8, command=self.stop_command)       
         self.reset_button  = ttk.Button(self, text="Reset",width=8, command=self.reset_command)
+        self.plot_button   = ttk.Button(self, text="Plot data", command=self.plot_expts)
+        
     
     def create_textboxes(self):
         # ---------------------
         # Create textboxes
         # ---------------------
-        
         self.text_no_exp = ttk.Entry(self, textvariable=self.exp_no_var, width=5) 
         self.text_exp_loc = ttk.Entry(self, textvariable=self.exp_path_var, width=20)
         self.text_imed_loc = ttk.Entry(self, textvariable=self.imed_path_var, width=20)
     
-    
-    # ------------------------------------- PLACE VARIABLES ---------------------------------------------
-    
+    # ---------------------------------------------------------------------------------------------
+    # ------------------------------------- PLACE VARIABLES ---------------------------------------
+    # ---------------------------------------------------------------------------------------------
     
     def layout_widgets(self):
-        
+        # ---------------------
+        # Place textboxes
+        # ---------------------
         self.Omni_label1.place(x=400,y=210)
         self.Imed_label1.place(x=500,y=210)
         self.general_label1.place(x=400,y=180)
@@ -143,43 +149,124 @@ class MyApplication(tk.Tk):
         self.quit_button.place(x=30,y=270)
         self.start_button.place(x=30,y=310)   
         self.stop_button.place(x=300,y=270)
+        self.plot_button.place(x=30,y=200)
         self.reset_button.place(x=300,y= 310)
         self.text_no_exp.place(x=150,y=140)
         self.text_exp_loc.place(x=150,y=120)
         self.text_imed_loc.place(x=150,y=160)    
     
-    
+    # -------------------------------------------------------------------------------------------------
     # ----------------------------------- HELPER FUNCTIONS  -------------------------------------------
-    
+    # -------------------------------------------------------------------------------------------------
     
     def set_buttons_enabled(self, enabled: bool):
         # -----------------------------------------------------------------------------------------
         # Enable / Disable buttons
         # -----------------------------------------------------------------------------------------
-        
         flags = ["!disabled"] if enabled else ["disabled"]
-        
-        for btn in (self.start_button, self.define_button, self.quit_button, self.reset_button):
+        for btn in (self.start_button, self.define_button, self.quit_button, self.reset_button):#, self.plot_button):
             btn.state(flags)
-
         pass
     
     def check_if_empty_text(self):
         # -----------------------------------------------------------------------------------------
         # Check if textboxes are empty
         # -----------------------------------------------------------------------------------------
+        return [len(i) != 0 for i in [self.text_exp_loc.get().strip(), self.text_imed_loc.get().strip(), self.text_no_exp.get().strip()]]      
+
+    def upon_omni_finished(self):
+        # ---------------------------------------------
+        # change widgets when omni step completed
+        # ---------------------------------------------
+        self.Omni_label1.configure(style="Grey.TLabel")
+        self.Imed_label1.configure(style="Green.TLabel")
+        self.omni_run_count.set(self.CONTROLLER.omni_count)
+        self.Omni_label2.config(text=str(self.CONTROLLER.omni_count))
+        self.plot_button.state(["!disabled"])
         
-        return [len(i) != 0 for i in [self.text_exp_loc.get().strip(), self.text_imed_loc.get().strip(), self.text_no_exp.get().strip()]]              
+    def upon_imed_finished(self):
+        # ---------------------------------------------
+        # change widgets when imed step completed
+        # ---------------------------------------------
+        self.Omni_label1.configure(style="Green.TLabel")
+        self.Imed_label1.configure(style="Grey.TLabel")
+        self.imed_run_count.set(self.CONTROLLER.imed_count)
+        self.Imed_label2.config(text=str(self.CONTROLLER.imed_count))
+
+    def monitoring_omni(self, check_frequency, num, path):
+        # -----------------------------------------------------------------
+        # monitoring the omni target folder for experiments to be created
+        # -----------------------------------------------------------------
+        if self.CONTROLLER.process_stop:
+            return True      
+            
+        self.CONTROLLER.current_stage = Stage.OMNI
+        
+        if self.CONTROLLER.if_omni_finished(path,num):
+            PATH = self.CONTROLLER.pathcreator_imed(self.CONTROLLER.omni_count, self.CONTROLLER.imed_folder)   
+            self.CONTROLLER.omni_count += 1
+            
+            
+            
+            self.upon_omni_finished()
+            # start IMED
+            self.monitoring_imed(5, 1, PATH)
+            return True
+            
+        else:
+            self.Omni_label1.configure(style="Green.TLabel")
+            self.Imed_label1.configure(style="Grey.TLabel")
+            self.after(check_frequency * 1000, lambda: self.monitoring_omni(check_frequency, num, path))
+            return False
+
+    def monitoring_imed(self, check_frequency, num, path):
+        # -----------------------------------------------------------------
+        # monitoring the imed target folder for experiments to be created
+        # -----------------------------------------------------------------
+
+        if self.CONTROLLER.process_stop:
+            return True 
+            
+        self.CONTROLLER.current_stage = Stage.IMED
+        
+        if self.CONTROLLER.if_imed_finished(path):
+            self.CONTROLLER.imed_count += 1
+            self.upon_imed_finished()
+            PATH, exp_count = self.CONTROLLER.pathcreator_omni(self.CONTROLLER.imed_count, self.CONTROLLER.omni_folder)  
+            self.monitoring_omni(5, exp_count, PATH)
+            return True
+
+        else:  
+            self.Omni_label1.configure(style="Grey.TLabel")
+            self.Imed_label1.configure(style="Green.TLabel")
+            self.after(check_frequency * 1000, lambda: self.monitoring_imed(check_frequency, num, path))
+            return False          
+            
     
-        
+    # ---------------------------------------------------------------------------------------------    
     # ----------------------------------- BUTTON CALLS  -------------------------------------------
-        
-        
+    # ---------------------------------------------------------------------------------------------
+    
+    def plot_expts(self):
+        # -----------------------------------------------------------------------------------------
+        # Create pop-up window of the processed experiments
+        # -----------------------------------------------------------------------------------------
+        if self.DATAPROCESSOR is not None:
+            win = tk.Toplevel(self)
+            win.title("Experiments so far")
+            frame = ttk.Frame(win, padding=10)
+            frame.pack(fill="both", expand=True)
+            A = DataManager(self.omni_folder.get(), self.imed_folder.get())
+            A.evaluator(True)
+            fig = A.fig
+            canvas = FigureCanvasTkAgg(fig, master=frame)
+            canvas.draw()
+            canvas.get_tk_widget().pack(fill="both", expand=True)
+
     def define_command(self):    
         # -----------------------------------------------------------------------------------------
         # Define initial data for process (file location, initial DoE experiment number)
         # -----------------------------------------------------------------------------------------
-        
         self.status_message.set('')
         self.error_message.set('')
         self.variables_set_message.set('')
@@ -214,9 +301,9 @@ class MyApplication(tk.Tk):
                         self.general_label5.config(style="Green.TLabel")
                         self.variables_set.set(True)
 
-                        # Create the controller object that handles the processes in the background: self.contr = Controller(...)
-                        self.contr = Controller(self.omni_folder.get(), self.imed_folder.get(), self.initial_exp_count.get(), self.omni_filename, self.imed_filename)
-                        self.contr.exp_num(no_exp)
+                        # Create the controller object that handles the processes in the background: self.CONTROLLER = Controller(...)
+                        self.CONTROLLER = Controller(self.omni_folder.get(), self.imed_folder.get(), self.initial_exp_count.get(), self.omni_filename, self.imed_filename)
+                        self.CONTROLLER.exp_num(no_exp)
                         
                 except ValueError:
                     self.error_message.set("Enter a valid integer")
@@ -229,7 +316,6 @@ class MyApplication(tk.Tk):
         # ----------------------------------------
         # start the automated OMNIBUS-->IMED loops
         # ----------------------------------------
- 
         if not self.variables_set.get():         
             messagebox.showerror("Error", 'Please define variables first!')
             
@@ -242,10 +328,12 @@ class MyApplication(tk.Tk):
             
             # START OMNIBUS (actually call folder and app on OMNI computer)
             
-            self.contr.process_stop = False
+            self.CONTROLLER.process_stop = False
             self.set_buttons_enabled(False)
-            
-            self.contr.start()
+            # Control of processes
+            self.CONTROLLER.start()
+            # Store process exp info:
+            self.DATAPROCESSOR = DataManager(self.omni_folder.get(), self.imed_folder.get())
             self.monitoring_omni(5, self.initial_exp_count.get(), self.omni_folder.get())
             
                
@@ -253,7 +341,6 @@ class MyApplication(tk.Tk):
         # --------------------------------------------------------------
         # Terminate the processes (still in progress to complete)
         # --------------------------------------------------------------
-        
         self.process_stop = False
         if not self.variables_set.get():
             messagebox.showerror("Error", 'Please define variables first!')
@@ -264,18 +351,14 @@ class MyApplication(tk.Tk):
             self.set_buttons_enabled(True)
             # taskkill Application.exe -> cmd
             # taskkill IMED
-            
-            self.contr.stop()
+            self.CONTROLLER.stop()
 
     def reset_command(self):        
         # ---------------------------------------------
         # reset all vairables and widgets
         # ---------------------------------------------
-        
         self.variables_set_message.set("")
         self.variables_set.set(False) 
-         
-         
         self.process_stop = False 
         self.initial_exp_count.set(0)
         self.omni_run_count.set(0) 
@@ -294,74 +377,10 @@ class MyApplication(tk.Tk):
         self.Omni_label2.config(text=str(self.omni_run_count.get()))
         self.Imed_label2.config(text=str(self.imed_run_count.get()))
         
-        self.controller : Controller | None = None
-                
+        self.CONTROLLER : Controller  | None = None
+        self.DATAPROCESSOR   : DataManager | None = None        
         
-    def upon_omni_finished(self):
-        # ---------------------------------------------
-        # change widgets when omni step completed
-        # ---------------------------------------------
-        
-        self.Omni_label1.configure(style="Grey.TLabel")
-        self.Imed_label1.configure(style="Green.TLabel")
-        self.omni_run_count.set(self.contr.omni_count)
-        self.Omni_label2.config(text=str(self.contr.omni_count))
-        
-    def upon_imed_finished(self):
-        # ---------------------------------------------
-        # change widgets when imed step completed
-        # ---------------------------------------------
-        
-        self.Omni_label1.configure(style="Green.TLabel")
-        self.Imed_label1.configure(style="Grey.TLabel")
-        self.imed_run_count.set(self.contr.imed_count)
-        self.Imed_label2.config(text=str(self.contr.imed_count))
-
-    def monitoring_omni(self, check_frequency, num, path):
-        # -----------------------------------------------------------------
-        # monitoring the omni target folder for experiments to be created
-        # -----------------------------------------------------------------
-        
-        if self.contr.process_stop:
-            return True      
-            
-        self.contr.current_stage = Stage.OMNI
-        
-        if self.contr.if_omni_finished(path,num):
-            PATH = self.contr.pathcreator_imed(self.contr.omni_count, self.contr.imed_folder)   
-            self.contr.omni_count += 1
-            self.upon_omni_finished()   
-            self.monitoring_imed(5, 1, PATH)
-            return True
-            
-        else:
-            self.Omni_label1.configure(style="Green.TLabel")
-            self.Imed_label1.configure(style="Grey.TLabel")
-            self.after(check_frequency * 1000, lambda: self.monitoring_omni(check_frequency, num, path))
-            return False
-
-    def monitoring_imed(self, check_frequency, num, path):
-        # -----------------------------------------------------------------
-        # monitoring the imed target folder for experiments to be created
-        # -----------------------------------------------------------------
-
-        if self.contr.process_stop:
-            return True 
-            
-        self.contr.current_stage = Stage.IMED
-        
-        if self.contr.if_imed_finished(path):
-            self.contr.imed_count += 1
-            self.upon_imed_finished()
-            PATH, exp_count = self.contr.pathcreator_omni(self.contr.imed_count, self.contr.omni_folder)  
-            self.monitoring_omni(5, exp_count, PATH)
-            return True
-
-        else:  
-            self.Omni_label1.configure(style="Grey.TLabel")
-            self.Imed_label1.configure(style="Green.TLabel")
-            self.after(check_frequency * 1000, lambda: self.monitoring_imed(check_frequency, num, path))
-            return False             
+       
 
 if __name__ == "__main__":
     app = MyApplication()
@@ -371,7 +390,7 @@ if __name__ == "__main__":
 # C:\Users\user\Desktop\OMNI\2. IMED
 
 
-# In[2]:
+# In[54]:
 
 
 import os, shutil
@@ -393,18 +412,6 @@ def folder_cleaner(folder):
 
 folder_cleaner(folder_1)
 folder_cleaner(folder_2)
-
-
-# In[20]:
-
-
-from pure_functions import counter
-
-
-# In[18]:
-
-
-counter(r"C:\Users\user\Desktop\OMNI\1. OMNI", "expttsd")
 
 
 # In[ ]:

@@ -36,10 +36,8 @@ class Controller:
         self.process_stop = False
 
         # START OMNIBUS for the 1st time - self.omni_folder
+        # a = subprocess.run(["cmd", "/c", "dir"], capture_output=True, text=True)
         
-        a = subprocess.run(["cmd", "/c", "dir"], capture_output=True, text=True)
-        print(a)
-
     def reset(self):
         self.process_stop = False
         self.current_stage = None

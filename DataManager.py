@@ -4,7 +4,7 @@
 # In[1]:
 
 
-from pure_functions import W_pred, corr_func, L_pred, smoother, solub, final_value, SED
+from pure_functions import W_pred, corr_func, L_pred, smoother, solub, final_value, SED, file_finder
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -12,22 +12,21 @@ import numpy as np
 from scipy.optimize import minimize
 
 
-
-# In[12]:
+# In[2]:
 
 
 class DataManager:
-    def __init__(self,LOCS):
-        self.LOCS         = LOCS
+    def __init__(self,omni_fileloc, imed_fileloc, omni_filename='expttsd', imed_filename='imed'):
+        self.LOCS          = file_finder(omni_fileloc,omni_filename)
         self.DESC_best_W   = [2]
         self.DESC_best     = [1, 2]
         self.finaltime     = 10 # minutes
-        self.colors       = ['blue','red','green']
+        self.colors        = ['blue','red','green']
         self.conc_corr     = True
-        self.fig, self.axT = plt.subplots(2,2,figsize=(10,7))
-        self.res           = []
+        self.sizedata      = []
+        self.popt          = [1,0]
 
-    def plotter(self, E1, T1, WWW_1, LLL_1, SL1, SW1, j, collor='blue'):
+    def plot_generator(self, E1, T1, WWW_1, LLL_1, SL1, SW1, j, collor='blue'):
         
         self.axT[0,0].plot(T1,E1['H01:External T'],'black',linestyle='--',alpha=0.5)
         ax_FBRM = self.axT[0,0].twinx()
@@ -44,12 +43,17 @@ class DataManager:
             ax_conc = self.axT[0,1].twinx()
             bnds = ((1e-10, 100), (-10, 100))
             x0 = np.array([1.1, 0.002])
-            X = [E1['File R: Conc '],solub(E1['H01:External T'])]
+            conc_smooth_t,conc_smooth = smoother(E1['File R: Conc '],T1,0,20)
+            conc_smooth = pd.DataFrame(conc_smooth)
+            X = [conc_smooth,solub(E1['H01:External T'])]
             res = minimize(corr_func, x0, args=(X), method='nelder-mead',bounds=bnds,options={'xatol': 1e-20, 'disp': False})
-            popt = [res.x[0],res.x[-1]]
+            self.popt = [res.x[0],res.x[-1]]
+            ax_conc.plot(conc_smooth_t,self.popt[0]*X[0]+self.popt[1],c=collor,alpha=0.7)
             
+        else:
+            
+            ax_conc.plot(T1,self.popt[0]*E1['File R: Conc ']+self.popt[1],c=collor,alpha=0.7)
         
-        ax_conc.scatter(T1,popt[0]*E1['File R: Conc ']+popt[1],c=collor,s=4,alpha=0.7)
         ax_conc.plot(T1,solub(E1['H01:External T']))
         self.axT[0,1].set_xlabel(E1.columns[0][0]+' '+'['+E1.columns[0][1]+']')
         self.axT[0,1].set_ylabel(E1.columns[2][0]+' '+'['+E1.columns[2][1]+']')
@@ -95,86 +99,78 @@ class DataManager:
         SW1 = [smoother(WWW_1,T1,2,k)[0],smoother(WWW_1,T1,0,k)[1],smoother(WWW_1,T1,1,k)[1],smoother(WWW_1,T1,2,k)[1]]
         
         return T1, WWW_1, LLL_1, SL1, SW1
-    
-    def evaluator(self):
+
+    def evaluator(self,to_plot=False):
+        if to_plot:
+            self.fig, self.axT = plt.subplots(2,2,figsize=(10,7))
         for j,i in enumerate(self.LOCS):
             E1 = pd.read_csv(i, header = [0, 1])
             T1, WWW_1, LLL_1, SL1, SW1 = self.data_preprocess(E1,70)
-            print(self.colors[j%3])
-            self.plotter(E1,T1, WWW_1, LLL_1, SL1, SW1, j, collor=self.colors[j%3])
-            #print(SED(final_value(T1, LLL_1, self.finaltime),final_value(T1, WWW_1, self.finaltime)))
+            if to_plot:                
+                self.plot_generator(E1,T1, WWW_1, LLL_1, SL1, SW1, j, collor=self.colors[j%3])
             VAL = pd.DataFrame({'Length':final_value(T1, WWW_1, self.finaltime),'Width': final_value(T1, LLL_1, self.finaltime), 'SED': SED(final_value(T1, LLL_1, self.finaltime),final_value(T1, WWW_1, self.finaltime))})        
-            self.res.append(VAL)
-        return self.res
+            self.sizedata.append(VAL)
+        pass 
         
 
 
-# In[13]:
+# In[3]:
 
 
-loc1 = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\Re_ repr_Omni_1126\expttsd2.csv"
-loc2 = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\Re_ repr_Omni_1126\expttsd4.csv"
-loc3 = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\Re_ repr_Omni_1126\expttsd6.csv"
-loc4 = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\repr_Omni_1126\expttsd2.csv"
-loc5 = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\repr_Omni_1126\expttsd4.csv"
+#loc1 = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\Re_ repr_Omni_1126\expttsd2.csv"
+#loc2 = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\Re_ repr_Omni_1126\expttsd4.csv"
+#loc3 = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\Re_ repr_Omni_1126\expttsd6.csv"
+#loc4 = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\repr_Omni_1126\expttsd2.csv"
+#loc5 = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\repr_Omni_1126\expttsd4.csv"
 
 
-# In[14]:
+# In[4]:
 
 
-LOCS1 = [loc1, loc2, loc3]
+#LOC = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\Re_ repr_Omni_1126"
+
+#R = DataManager(LOC,LOC)
 
 
-R = DataManager(LOCS1)
-R.evaluator()
+# In[6]:
 
 
-# In[15]:
+#R.evaluator(True#)
 
 
-LOCS2 = [loc4, loc5]
-F = DataManager(LOCS2)
-F.evaluator()
+# In[123]:
 
 
-# In[16]:
+#from scipy.io import loadmat
+#from scipy.io import savemat
 
 
-# next steps: create a dataframe with all read data and convert it to .mat file and append additional experimental data
-
-
-# In[43]:
-
-
-from scipy.io import loadmat
-from scipy.io import savemat
-
-
-data = loadmat(r"C:\Users\user\12. OMNIBUS-IMED integration\2025_12_10_init_models.mat", squeeze_me=True, struct_as_record=True)
+#data = loadmat(r"C:\Users\user\12. OMNIBUS-IMED integration\2025_12_10_init_models.mat", squeeze_me=True, struct_as_record=True)
 #savemat(r"C:\Users\user\modified.mat", data, do_compression=False)
+#data
 
 
-# In[97]:
+# In[109]:
 
 
-fig, ax = plt.subplots(1,data['No'],figsize=(12,2) )
-for i in range(data['No']):
+#fig, ax = plt.subplots(1,data['No'],figsize=(12,2) )
+#for i in range(data['No']):
     
-    ax[i].plot(data['ExpData'][i][0][0],data['ExpData'][i][0][1],label='c',color='black')
-    ax[i].plot(data['ExpData'][i][4][0],solub(data['ExpData'][i][4][1]),'-.',label='sol',color='grey')
-    ax[i].set_xlabel("Time [s]")
-    ax[i].set_ylim([0.04,0.1])
-    ax[i].set_title(f'Exp. no {i+1:.0f}')
-    axT = ax[i].twinx()
-    axT.plot(data['ExpData'][i][4][0],data['ExpData'][i][4][1],'--',color='red',label='T')
-    axT.yaxis.label.set_color('red')
-    axT.tick_params(axis='y', colors='red')
-    axT.set_ylim([0,60])
+    #ax[i].plot(data['ExpData'][i][0][0],data['ExpData'][i][0][1],label='c',color='black')
+    #ax[i].plot(data['ExpData'][i][4][0],solub(data['ExpData'][i][4][1]),'-.',label='sol',color='grey')
+    #ax[i].set_xlabel("Time [s]")
+    #ax[i].set_ylim([0.04,0.1])
+    #ax[i].set_title(f'Exp. no {i+1:.0f}')
+    #axT = ax[i].twinx()
+    #axT.plot(data['ExpData'][i][4][0],data['ExpData'][i][4][1],'--',color='red',label='T')
+    #axT.yaxis.label.set_color('red')
+    #axT.tick_params(axis='y', colors='red')
+    #axT.set_ylim([0,60])
     
-fig.tight_layout()
+#fig.tight_layout()
 
 
-# In[83]:
+# In[1]:
 
 
 def in_c(M,S,s):

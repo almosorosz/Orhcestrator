@@ -6,12 +6,41 @@
 
 def counter( folder, filename):
     import os 
+    
     count = 0
     with os.scandir(folder) as entries:
         for entry in entries:           
-            if filename in entry.name:
+            try:
+                A = int(entry.name[-5])
+                T = A %2 == 0
+            except:
+                T = False
+            if filename in entry.name and T:
                 count += 1
     return count
+
+def file_finder(folder, filename):
+    import os 
+    files = []
+        
+    with os.scandir(folder) as entries:
+        for entry in entries:        
+            try:
+                A = int(entry.name[-5])
+                T = A%2 == 0
+            except:
+                T = False
+            if filename in entry.name and T:
+                files.append(entry.path)
+    return files
+
+def corr_func(x,X):
+    A = x[0] * X[0] + x[1]
+    C = (A.iloc[0].values - X[0].iloc[0].values)**2
+    C = (A.iloc[0].values - 0.07332960848175958)**2
+    D = (A.iloc[-1].values - X[1].iloc[-1].values)**2
+
+    return  C+D
 
 def W_pred(X_new):
     mu_X = [151.74736042]
@@ -24,13 +53,7 @@ def W_pred(X_new):
     
     return Y_pred_direct
 
-def corr_func(x,X):
-        A = x[0] * X[0] + x[1]
-        C = (A.iloc[0].values - X[0].iloc[0].values)**2
-        C = (A.iloc[0].values - 0.07332960848175958)**2
-        D = (A.iloc[-1].values - X[1].iloc[-1].values)**2
 
-        return  C+D
 
 def L_pred(X_new):
     mu_X = [201.78218686, 736.3733133 ]
@@ -60,4 +83,16 @@ def final_value(T1, WWW_1,finaltime):
 def SED(L,W):
     
     return ((6*L*(W**2))/3.141592653589793)**(1/3)
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
 
