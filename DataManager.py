@@ -12,85 +12,112 @@ import numpy as np
 from scipy.optimize import minimize
 
 
-# In[2]:
+# In[86]:
 
 
 class DataManager:
-    def __init__(self,omni_fileloc, imed_fileloc, omni_filename='expttsd', imed_filename='imed'):
-        self.LOCS          = file_finder(omni_fileloc,omni_filename)
+    def __init__(self, omni_filename="expttsd", imed_filename="imed"):
+        self.omni_filename = "expttsd"
+        self.imed_filename = "imed"
+        self.omni_folder   = None
         self.DESC_best_W   = [2]
         self.DESC_best     = [1, 2]
         self.finaltime     = 10 # minutes
-        self.colors        = ['blue','red','green']
+        self.colors        = ['orange','magenta','blue','red','green']
         self.conc_corr     = True
         self.sizedata      = []
+        self.EVAL          = []
         self.popt          = [1,0]
+        self.read_files    = []
+        self.read_data_from = []
+        
+    def plot_generator(self):
 
-    def plot_generator(self, E1, T1, WWW_1, LLL_1, SL1, SW1, j, collor='blue'):
-        
-        self.axT[0,0].plot(T1,E1['H01:External T'],'black',linestyle='--',alpha=0.5)
-        ax_FBRM = self.axT[0,0].twinx()
-        ax_FBRM.plot(T1,E1['OPC R: Counts '],collor,linestyle='-',alpha=0.7)
-        self.axT[0,0].set_xlabel(E1.columns[0][0]+' '+'['+E1.columns[0][1]+']')
-        self.axT[0,0].set_ylabel(E1.columns[2][0]+' '+'['+E1.columns[2][1]+']')
-        ax_FBRM.set_ylabel(E1.columns[4][0]+' '+'['+E1.columns[4][1]+']')
-        self.axT[0,0].grid(True)
-        ax_FBRM.set_ylim([0,80000])
-        
-        self.axT[0,1].plot(T1,E1['H01:External T'],'black',linestyle='--',alpha=0.5)
-        
-        if self.conc_corr: #correction for UV-shift
-            ax_conc = self.axT[0,1].twinx()
-            bnds = ((1e-10, 100), (-10, 100))
-            x0 = np.array([1.1, 0.002])
-            conc_smooth_t,conc_smooth = smoother(E1['File R: Conc '],T1,0,20)
-            conc_smooth = pd.DataFrame(conc_smooth)
-            X = [conc_smooth,solub(E1['H01:External T'])]
-            res = minimize(corr_func, x0, args=(X), method='nelder-mead',bounds=bnds,options={'xatol': 1e-20, 'disp': False})
-            self.popt = [res.x[0],res.x[-1]]
-            ax_conc.plot(conc_smooth_t,self.popt[0]*X[0]+self.popt[1],c=collor,alpha=0.7)
-            
+        if len(self.EVAL) == 0:
+            pass
+
         else:
             
-            ax_conc.plot(T1,self.popt[0]*E1['File R: Conc ']+self.popt[1],c=collor,alpha=0.7)
-        
-        ax_conc.plot(T1,solub(E1['H01:External T']))
-        self.axT[0,1].set_xlabel(E1.columns[0][0]+' '+'['+E1.columns[0][1]+']')
-        self.axT[0,1].set_ylabel(E1.columns[2][0]+' '+'['+E1.columns[2][1]+']')
-        ax_conc.set_ylabel(E1.columns[-1][0]+' '+'['+E1.columns[-1][1]+']')
-        ax_conc.set_ylim([0.04,0.08])
-        self.axT[0,1].grid(True)
-    
-        mask = (T1 > max(T1) - self.finaltime)
-        
-        self.axT[1,0].plot(T1,E1['H01:External T'],'black',linestyle='--',alpha=0.2)
-        ax_L = self.axT[1,0].twinx()
-        ax_L.plot(T1,LLL_1,collor,linestyle='-',alpha=0.1)
-        ax_L.plot(T1[mask],LLL_1.iloc[mask,:],collor,linestyle='-',alpha=0.6)    
-        [ax_L.plot(SL1[0],SL1[i],collor, linestyle='-',alpha=0.9) for i in [1,2,3]]
-        self.axT[1,0].set_xlabel(E1.columns[0][0]+' '+'['+E1.columns[0][1]+']')
-        self.axT[1,0].set_ylabel(E1.columns[2][0]+' '+'['+E1.columns[2][1]+']')
-        ax_L.set_ylim([0,300])
-        ax_L.set_ylabel('Length'+' '+'['+E1.columns[5][1]+']')
-        self.axT[1,0].grid(True)
-        
-        ax_L.text(plt.xlim()[1]*(0.3+j*0.25),plt.ylim()[1]*1.01,f'Exp. no:{j : .0f}', color=collor)
-        
-        self.axT[1,1].plot(T1,E1['H01:External T'],'black',linestyle='--',alpha=0.5)
-        ax_W = self.axT[1,1].twinx()
-        ax_W.plot(T1,WWW_1,collor,linestyle='-',alpha=0.3)
-        ax_W.plot(T1[mask],WWW_1.iloc[mask,:],collor,linestyle='-',alpha=0.9)    
-        [ax_W.plot(SW1[0],SW1[i],collor, linestyle='-',alpha=0.9) for i in [1,2,3]]
-        self.axT[1,1].set_xlabel(E1.columns[0][0]+' '+'['+E1.columns[0][1]+']')
-        self.axT[1,1].set_ylabel(E1.columns[2][0]+' '+'['+E1.columns[2][1]+']')
-        ax_W.set_ylabel('Width'+' '+'['+E1.columns[9][1]+']')
-        self.axT[1,1].grid(True)
-        ax_W.set_ylim([0,30])
-        self.fig.tight_layout()
-        
-        pass
+            self.fig, self.axT = plt.subplots(len(self.EVAL)+1,4,figsize=(10,1.5*(len(self.EVAL)+1)))
+            for i in range(len(self.EVAL)):
+                E = self.EVAL[i]
+                T1, WWW_1, LLL_1, SL1, SW1 = self.data_evaluator(E,70)
+                
+                
+                self.axT[i,0].plot(T1,self.EVAL[i]['H01:External T'],'black',linestyle='--',alpha=0.9)
+                ax_FBRM = self.axT[i,0].twinx()
+                ax_FBRM.plot(T1,self.EVAL[i]['OPC R: Counts '],self.colors[i%5],linestyle='-',alpha=0.7)
+                self.axT[i,0].set_xlabel(E.columns[0][0]+' '+'['+self.EVAL[i].columns[0][1]+']')
+                self.axT[i,0].set_ylabel(E.columns[2][0]+'\n'+'['+self.EVAL[i].columns[2][1]+']')
+                ax_FBRM.tick_params(axis='y', colors=self.colors[i%5])
+                ax_FBRM.spines['right'].set_color(self.colors[i%5])
+                ax_FBRM.set_ylabel(E.columns[4][0]+'\n'+'['+self.EVAL[i].columns[4][1]+']')
+                self.axT[i,0].grid(True)
+                ax_FBRM.set_ylim([0,80000])
+                
+                self.axT[i,1].plot(T1,self.EVAL[i]['H01:External T'],'black',linestyle='--',alpha=0.9)
+                
+                if self.conc_corr: #correction for UV-shift
+                    ax_conc = self.axT[i,1].twinx()
+                    bnds = ((1e-10, 100), (-10, 100))
+                    x0 = np.array([1.1, 0.002])
+                    conc_smooth_t,conc_smooth = smoother(E['File R: Conc '],T1,0,20)
+                    conc_smooth = pd.DataFrame(conc_smooth)
+                    X = [conc_smooth,solub(E['H01:External T'])]
+                    res = minimize(corr_func, x0, args=(X), method='nelder-mead',bounds=bnds,options={'xatol': 1e-20, 'disp': False})
+                    self.popt = [res.x[0],res.x[-1]]
+                    ax_conc.plot(conc_smooth_t,self.popt[0]*X[0]+self.popt[1],c=self.colors[i%5],alpha=0.7)
+                    
+                else:
+                    
+                    ax_conc.plot(T1,self.popt[0]*self.EVAL[i]['File R: Conc ']+self.popt[1],c=self.colors[i%5],alpha=0.7)
+                
+                ax_conc.plot(T1,solub(E['H01:External T']),c=self.colors[i%5],alpha=0.5)
+                self.axT[i,1].set_xlabel(E.columns[0][0]+' '+'['+self.EVAL[i].columns[0][1]+']')
+                self.axT[i,1].set_ylabel(E.columns[2][0]+'\n'+'['+self.EVAL[i].columns[2][1]+']')
+                ax_conc.set_ylabel(E.columns[-1][0]+'\n'+'['+self.EVAL[i].columns[-1][1]+']')
+                ax_conc.tick_params(axis='y', colors=self.colors[i%5])
+                ax_conc.spines['right'].set_color(self.colors[i%5])
+                ax_conc.set_ylim([0.04,0.08])
+                self.axT[i,1].grid(True)
+                
+                mask = (T1 > max(T1) - self.finaltime)
+                
+                self.axT[i,2].plot(T1,self.EVAL[i]['H01:External T'],'black',linestyle='--',alpha=0.9)
+                ax_L = self.axT[i,2].twinx()
+                ax_L.plot(T1,LLL_1,self.colors[i%5],linestyle='-',alpha=0.2)
+                ax_L.plot(T1[mask],LLL_1.iloc[mask,:],self.colors[i%5],linestyle='-',alpha=0.9)    
+                [ax_L.plot(SL1[0],SL1[j],self.colors[i%5], linestyle='-',alpha=0.9) for j in [1,2,3]]
+                self.axT[i,2].set_xlabel(E.columns[0][0]+' '+'['+self.EVAL[i].columns[0][1]+']')
+                self.axT[i,2].set_ylabel(E.columns[2][0]+' '+'['+self.EVAL[i].columns[2][1]+']')
+                ax_L.tick_params(axis='y', colors=self.colors[i%5])
+                ax_L.spines['right'].set_color(self.colors[i%5])
+                ax_L.set_ylim([0,300])
+                ax_L.set_ylabel('Length'+' '+'['+self.EVAL[i].columns[5][1]+']')
+                self.axT[i,2].grid(True)
+                
+                ax_L.text(plt.xlim()[1]*(0.3),plt.ylim()[1]*1.05,f'Exp. no:{i : .0f}', color=self.colors[i%5])
+                
+                self.axT[i,3].plot(T1,self.EVAL[i]['H01:External T'],'black',linestyle='--',alpha=0.9)
+                ax_W = self.axT[i,3].twinx()
+                ax_W.plot(T1,WWW_1,self.colors[i%5],linestyle='-',alpha=0.2)
+                ax_W.plot(T1[mask],WWW_1.iloc[mask,:],self.colors[i%5],linestyle='-',alpha=0.9)    
+                [ax_W.plot(SW1[0],SW1[j],self.colors[i%5], linestyle='-',alpha=0.9) for j in [1,2,3]]
+                self.axT[i,3].set_xlabel(E.columns[0][0]+' '+'['+self.EVAL[i].columns[0][1]+']')
+                self.axT[i,3].set_ylabel(E.columns[2][0]+' '+'['+self.EVAL[i].columns[2][1]+']')
+                ax_W.tick_params(axis='y', colors=self.colors[i%5])
+                ax_W.spines['right'].set_color(self.colors[i%5])
+                ax_W.set_ylabel('Width'+' '+'['+self.EVAL[i].columns[9][1]+']')
+                self.axT[i,3].grid(True)
+                ax_W.set_ylim([0,30])
+                self.fig.tight_layout()
+                
+            for ax in self.axT[-1, :]:
+                self.fig.delaxes(ax)
+            
+            pass
 
-    def data_preprocess(self,E1,k):
+    def data_evaluator(self,E1,k):
 
         T1 = (E1['Time']).values.reshape(1,-1)[0] - (E1['Time'][0:1]).values[0]
         WWW_1 = pd.DataFrame(W_pred(np.array([E1[['OPC R: W10 ','OPC R: W50 ','OPC R: W90 ']].iloc[:,self.DESC_best_W]]))[0][:,:])
@@ -99,43 +126,27 @@ class DataManager:
         SW1 = [smoother(WWW_1,T1,2,k)[0],smoother(WWW_1,T1,0,k)[1],smoother(WWW_1,T1,1,k)[1],smoother(WWW_1,T1,2,k)[1]]
         
         return T1, WWW_1, LLL_1, SL1, SW1
+        
+    def data_reader(self):
+        
+        for k,i in enumerate(file_finder(self.read_data_from,self.omni_filename)):
 
-    def evaluator(self,to_plot=False):
-        if to_plot:
-            self.fig, self.axT = plt.subplots(2,2,figsize=(10,7))
-        for j,i in enumerate(self.LOCS):
-            E1 = pd.read_csv(i, header = [0, 1])
-            T1, WWW_1, LLL_1, SL1, SW1 = self.data_preprocess(E1,70)
-            if to_plot:                
-                self.plot_generator(E1,T1, WWW_1, LLL_1, SL1, SW1, j, collor=self.colors[j%3])
-            VAL = pd.DataFrame({'Length':final_value(T1, WWW_1, self.finaltime),'Width': final_value(T1, LLL_1, self.finaltime), 'SED': SED(final_value(T1, LLL_1, self.finaltime),final_value(T1, WWW_1, self.finaltime))})        
-            self.sizedata.append(VAL)
-        pass 
+            if i not in self.read_files:
+                E1 = pd.read_csv(i, header = [0, 1])
+                T1, WWW_1, LLL_1, SL1, SW1 = self.data_evaluator(E1,70)
+                VAL = pd.DataFrame({'Length':final_value(T1, WWW_1, self.finaltime),'Width': final_value(T1, LLL_1, self.finaltime), 'SED': SED(final_value(T1, LLL_1, self.finaltime),final_value(T1, WWW_1, self.finaltime))})        
+                self.EVAL.append(E1)
+                self.sizedata.append(VAL)
+                self.read_files.append(i)
+
+        pass
         
 
 
-# In[3]:
+# In[ ]:
 
 
-#loc1 = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\Re_ repr_Omni_1126\expttsd2.csv"
-#loc2 = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\Re_ repr_Omni_1126\expttsd4.csv"
-#loc3 = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\Re_ repr_Omni_1126\expttsd6.csv"
-#loc4 = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\repr_Omni_1126\expttsd2.csv"
-#loc5 = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\repr_Omni_1126\expttsd4.csv"
-
-
-# In[4]:
-
-
-#LOC = r"D:\1. Doktori\1. Aktív projktek\OneDrive - Budapesti Műszaki és Gazdaságtudományi Egyetem\6. Purdue\1. Sandia - Resveratrol Data\New_omnibus\Re_ repr_Omni_1126"
-
-#R = DataManager(LOC,LOC)
-
-
-# In[6]:
-
-
-#R.evaluator(True#)
+# NEXT CHAPTER
 
 
 # In[123]:
@@ -168,11 +179,4 @@ class DataManager:
     #axT.set_ylim([0,60])
     
 #fig.tight_layout()
-
-
-# In[1]:
-
-
-def in_c(M,S,s):
-    return M/(M+M*(s/100)+S)
 

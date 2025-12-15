@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[53]:
+# In[17]:
 
 
 import os
@@ -14,7 +14,7 @@ from enum import Enum
 from typing import Optional
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-from data_flow import Controller, Stage
+from Controller import Controller, Stage
 from pure_functions import counter
 from DataManager import DataManager
 
@@ -176,7 +176,7 @@ class MyApplication(tk.Tk):
 
     def upon_omni_finished(self):
         # ---------------------------------------------
-        # change widgets when omni step completed
+        # Change widgets when omni step completed
         # ---------------------------------------------
         self.Omni_label1.configure(style="Grey.TLabel")
         self.Imed_label1.configure(style="Green.TLabel")
@@ -195,7 +195,7 @@ class MyApplication(tk.Tk):
 
     def monitoring_omni(self, check_frequency, num, path):
         # -----------------------------------------------------------------
-        # monitoring the omni target folder for experiments to be created
+        # Monitoring the omni target folder for experiments to be created
         # -----------------------------------------------------------------
         if self.CONTROLLER.process_stop:
             return True      
@@ -204,13 +204,15 @@ class MyApplication(tk.Tk):
         
         if self.CONTROLLER.if_omni_finished(path,num):
             PATH = self.CONTROLLER.pathcreator_imed(self.CONTROLLER.omni_count, self.CONTROLLER.imed_folder)   
+            self.CONTROLLER.current_imed_folder = PATH
             self.CONTROLLER.omni_count += 1
-            
-            
-            
             self.upon_omni_finished()
             # start IMED
-            self.monitoring_imed(5, 1, PATH)
+            
+            self.DATAPROCESSOR.read_data_from = self.CONTROLLER.current_omni_folder
+            self.DATAPROCESSOR.data_reader()
+            
+            self.monitoring_imed(3, 1, PATH)
             return True
             
         else:
@@ -221,9 +223,8 @@ class MyApplication(tk.Tk):
 
     def monitoring_imed(self, check_frequency, num, path):
         # -----------------------------------------------------------------
-        # monitoring the imed target folder for experiments to be created
+        # Monitoring the imed target folder for experiments to be created
         # -----------------------------------------------------------------
-
         if self.CONTROLLER.process_stop:
             return True 
             
@@ -233,7 +234,8 @@ class MyApplication(tk.Tk):
             self.CONTROLLER.imed_count += 1
             self.upon_imed_finished()
             PATH, exp_count = self.CONTROLLER.pathcreator_omni(self.CONTROLLER.imed_count, self.CONTROLLER.omni_folder)  
-            self.monitoring_omni(5, exp_count, PATH)
+            self.CONTROLLER.current_omni_folder = PATH
+            self.monitoring_omni(3, exp_count, PATH)
             return True
 
         else:  
@@ -241,27 +243,33 @@ class MyApplication(tk.Tk):
             self.Imed_label1.configure(style="Green.TLabel")
             self.after(check_frequency * 1000, lambda: self.monitoring_imed(check_frequency, num, path))
             return False          
-            
-    
+
     # ---------------------------------------------------------------------------------------------    
     # ----------------------------------- BUTTON CALLS  -------------------------------------------
     # ---------------------------------------------------------------------------------------------
+
     
     def plot_expts(self):
         # -----------------------------------------------------------------------------------------
         # Create pop-up window of the processed experiments
         # -----------------------------------------------------------------------------------------
+        
         if self.DATAPROCESSOR is not None:
-            win = tk.Toplevel(self)
-            win.title("Experiments so far")
-            frame = ttk.Frame(win, padding=10)
-            frame.pack(fill="both", expand=True)
-            A = DataManager(self.omni_folder.get(), self.imed_folder.get())
-            A.evaluator(True)
-            fig = A.fig
-            canvas = FigureCanvasTkAgg(fig, master=frame)
-            canvas.draw()
-            canvas.get_tk_widget().pack(fill="both", expand=True)
+
+            self.DATAPROCESSOR.read_data_from = self.CONTROLLER.current_omni_folder
+            self.DATAPROCESSOR.data_reader()
+            
+            if self.DATAPROCESSOR.EVAL:
+                win = tk.Toplevel(self)
+                win.title("Experiments so far")
+                frame = ttk.Frame(win, padding=10)
+                frame.pack(fill="both", expand=True)
+                            
+                self.DATAPROCESSOR.plot_generator()
+
+                canvas = FigureCanvasTkAgg(self.DATAPROCESSOR.fig, master=frame)
+                canvas.draw()
+                canvas.get_tk_widget().pack(fill="both", expand=True)
 
     def define_command(self):    
         # -----------------------------------------------------------------------------------------
@@ -330,13 +338,15 @@ class MyApplication(tk.Tk):
             
             self.CONTROLLER.process_stop = False
             self.set_buttons_enabled(False)
-            # Control of processes
+            
+            # -- Control of processes --
             self.CONTROLLER.start()
-            # Store process exp info:
-            self.DATAPROCESSOR = DataManager(self.omni_folder.get(), self.imed_folder.get())
+            
+            # -- Store process data: --
+            self.DATAPROCESSOR = DataManager(self.omni_filename, self.imed_filename)
+            self.DATAPROCESSOR.omni_fodlder = self.omni_folder.get()
             self.monitoring_omni(5, self.initial_exp_count.get(), self.omni_folder.get())
             
-               
     def stop_command(self):
         # --------------------------------------------------------------
         # Terminate the processes (still in progress to complete)
@@ -349,19 +359,22 @@ class MyApplication(tk.Tk):
             self.Omni_label1.configure(style="Grey.TLabel")
             self.Imed_label1.configure(style="Grey.TLabel")
             self.set_buttons_enabled(True)
+            
             # taskkill Application.exe -> cmd
             # taskkill IMED
+            
             self.CONTROLLER.stop()
+            time.sleep(3.1)
 
     def reset_command(self):        
         # ---------------------------------------------
         # reset all vairables and widgets
         # ---------------------------------------------
         self.variables_set_message.set("")
-        self.variables_set.set(False) 
-        self.process_stop = False 
+        self.variables_set.set(False)
+        self.process_stop = False
         self.initial_exp_count.set(0)
-        self.omni_run_count.set(0) 
+        self.omni_run_count.set(0)
         self.imed_run_count.set(0)
         self.status_message.set("") 
         self.error_message.set("") 
@@ -376,27 +389,29 @@ class MyApplication(tk.Tk):
         self.imed_run_count.set(0)
         self.Omni_label2.config(text=str(self.omni_run_count.get()))
         self.Imed_label2.config(text=str(self.imed_run_count.get()))
-        
+        if self.DATAPROCESSOR is not None:
+            self.CONTROLLER.stop()
+
         self.CONTROLLER : Controller  | None = None
         self.DATAPROCESSOR   : DataManager | None = None        
         
-       
-
 if __name__ == "__main__":
     app = MyApplication()
     app.mainloop()
+
 
 # C:\Users\user\Desktop\OMNI\1. OMNI
 # C:\Users\user\Desktop\OMNI\2. IMED
 
 
-# In[54]:
+# In[16]:
 
 
 import os, shutil
 
 folder_1 = r'C:\Users\user\Desktop\OMNI\1. OMNI'
 folder_2 = r'C:\Users\user\Desktop\OMNI\2. IMED'
+
 
 def folder_cleaner(folder):
     for filename in os.listdir(folder):
