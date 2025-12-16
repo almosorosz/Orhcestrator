@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[17]:
+# In[4]:
 
 
 import os
@@ -364,7 +364,7 @@ class MyApplication(tk.Tk):
             # taskkill IMED
             
             self.CONTROLLER.stop()
-            time.sleep(3.1)
+            #time.sleep(3.1)
 
     def reset_command(self):        
         # ---------------------------------------------
@@ -404,7 +404,7 @@ if __name__ == "__main__":
 # C:\Users\user\Desktop\OMNI\2. IMED
 
 
-# In[16]:
+# In[5]:
 
 
 import os, shutil
@@ -427,6 +427,12 @@ def folder_cleaner(folder):
 
 folder_cleaner(folder_1)
 folder_cleaner(folder_2)
+
+
+# In[ ]:
+
+
+
 
 
 # In[ ]:
